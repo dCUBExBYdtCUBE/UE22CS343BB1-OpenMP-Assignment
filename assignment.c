@@ -247,7 +247,7 @@ int main(int argc, char *argv[]) {
                         msgReply.type = FLUSH;
                         msgReply.sender = threadId;
                         msgReply.address = msg.address;
-                        msgReply.value = cacheline->value;
+                        msgReply.value = cacheLine->value;
 
                         sendMessage(procNodeAddr, msgReply);
 
@@ -305,28 +305,24 @@ int main(int argc, char *argv[]) {
                         clearAllBits(&dir->bitVector);
                         setBit(&dir->bitVector, msg.sender);
 
-                        msgReply.type = REPLY_ID;
-                        msgReply.sender = threadId;
-                        msgReply.address = msg.address;
-
-                        memcpy(msgReply.value, sharers, sharerCount);
-                        
-                        sendMessage(msg.sender, msgReply);
+                        for (int i = 0; i < sharerCount; i++) {
+                            msgReply.type = REPLY_ID;
+                            msgReply.sender = threadId;
+                            msgReply.address = msg.address;
+                            msgReply.value = sharers[i];  // Send one sharer per message
+                            sendMessage(msg.sender, msgReply);
+                        }
                         break;
                     }
 
                     case REPLY_ID: {
                         cacheLine *cacheLine = &node.cache[cacheIndex];
 
-                        for (int i = 0; i < msg.dataSize; i++) {
-                            byte sharer = msg.value[i];
-                            
-                            msgReply.type = INV;
-                            msgReply.sender = threadId;
-                            msgReply.address = msg.address;
-                            
-                            sendMessage(sharer, msgReply);
-                        }
+                        byte sharer = msg.value;  // Each message contains one sharer
+                        msgReply.type = INV;
+                        msgReply.sender = threadId;
+                        msgReply.address = msg.address;
+                        sendMessage(sharer, msgReply);
 
                         cacheLine->state = MODIFIED;
 
@@ -371,14 +367,13 @@ int main(int argc, char *argv[]) {
                             clearAllBits(&dir->bitVector);
                             setBit(&dir->bitVector, msg.sender);
 
-                            msgReply.type = REPLY_ID;
-                            msgReply.sender = threadId;
-                            msgReply.address = msg.address;
-
-                            memcpy(msgReply.value, sharers, sharerCount);
-                            msgReply.value = node.memory[memBlockAddr];
-                            
-                            sendMessage(msg.sender, msgReply);
+                            for (int i = 0; i < sharerCount; i++) {
+                                msgReply.type = REPLY_ID;
+                                msgReply.sender = threadId;
+                                msgReply.address = msg.address;
+                                msgReply.value = sharers[i];  // Send one sharer per message
+                                sendMessage(msg.sender, msgReply);
+                            }
                         }
                         else if (dir->state == DIR_EM) {
                             int ownerNode = findFirstSetBit(dir->bitVector);
@@ -415,7 +410,7 @@ int main(int argc, char *argv[]) {
                         msgReply.type = FLUSH_INVACK;
                         msgReply.sender = threadId;
                         msgReply.address = msg.address;
-                        msgReply.value = cacheline->value;
+                        msgReply.value = cacheLine->value;
                         
                         sendMessage(procNodeAddr, msgReply);
 
