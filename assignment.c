@@ -543,7 +543,7 @@ int main(int argc, char *argv[]) {
 
                     if (cacheLine->state == MODIFIED || cacheLine->state == EXCLUSIVE) {
                         byte offset = 0; 
-                        cacheLine->value[offset] = instr.value;
+                        cacheLine->value = instr.value;
 
                         cacheLine->state = MODIFIED;
                     } 
