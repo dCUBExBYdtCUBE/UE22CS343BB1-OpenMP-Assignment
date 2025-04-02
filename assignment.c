@@ -3,6 +3,7 @@
 #include <omp.h>
 #include <stdlib.h>
 #include <pthread.h>
+#include <string.h>
 
 #define NUM_PROCS 4
 #define CACHE_SIZE 4
@@ -234,7 +235,7 @@ int main(int argc, char *argv[]) {
                         cacheLine->address = msg.address;
                         cacheLine->state = SHARED;
 
-                        memcpy(cacheLine->data, msg.data, msg.dataSize);
+                        memcpy(cacheline->value, msg.data, msg.dataSize);
 
                         waitingForReply = 0;
                         break;
@@ -246,12 +247,12 @@ int main(int argc, char *argv[]) {
                         msgReply.type = FLUSH;
                         msgReply.sender = threadId;
                         msgReply.address = msg.address;
-                        msgReply.value = cacheLine->data;
+                        msgReply.value = cacheline->value;
 
                         sendMessage(procNodeAddr, msgReply);
 
-                        if (msg.requester != procNodeAddr) {
-                            sendMessage(msg.requester, msgReply);
+                        if (msg.secondReceiver != procNodeAddr) {
+                            sendMessage(msg.secondReceiver, msgReply);
                         }
 
                         cacheLine->state = SHARED;
@@ -262,16 +263,16 @@ int main(int argc, char *argv[]) {
                         if (threadId == procNodeAddr) {
                             directoryEntry *dir = &node.directory[memBlockAddr];
 
-                            memcpy(node.memory[memBlockAddr], msg.data, msg.dataSize);
+                            node.memory[memBlockAddr] = msg.value;
 
                             if (dir->state == DIR_EM) {
                                 dir->state = DIR_S;
 
                                 setBit(dir->bitVector, msg.sender);
-                                setBit(dir->bitVector, msg.requester);
+                                setBit(dir->bitVector, msg.secondReceiver);
                             }
                         } 
-                        else if (threadId == msg.requester) {
+                        else if (threadId == msg.secondReceiver) {
                             cacheLine *cacheLine = &node.cache[cacheIndex];
                             
                             if (cacheLine->state != INVALID && (cacheLine->address != msg.address)) {
@@ -281,7 +282,7 @@ int main(int argc, char *argv[]) {
                             cacheLine->address = msg.address;
                             cacheLine->state = SHARED;
 
-                            memcpy(cacheLine->data, msg.data, msg.dataSize);
+                            memcpy(cacheline->value, msg.data, msg.dataSize);
 
                             waitingForReply = 0;
                         }
@@ -301,7 +302,7 @@ int main(int argc, char *argv[]) {
                         }
 
                         dir->state = DIR_EM;
-                        clearAllBits(dir->bitVector);
+                        clearAllBits(&dir->bitVector);
                         setBit(dir->bitVector, msg.sender);
 
                         msgReply.type = REPLY_ID;
@@ -347,7 +348,7 @@ int main(int argc, char *argv[]) {
                         
                         if (dir->state == DIR_U) {
                             dir->state = DIR_EM;
-                            clearAllBits(dir->bitVector);
+                            clearAllBits(&dir->bitVector);
                             setBit(dir->bitVector, msg.sender);
                             
                             msgReply.type = REPLY_WR;
@@ -367,7 +368,7 @@ int main(int argc, char *argv[]) {
                             }
 
                             dir->state = DIR_EM;
-                            clearAllBits(dir->bitVector);
+                            clearAllBits(&dir->bitVector);
                             setBit(dir->bitVector, msg.sender);
 
                             msgReply.type = REPLY_ID;
@@ -375,7 +376,7 @@ int main(int argc, char *argv[]) {
                             msgReply.address = msg.address;
 
                             memcpy(msgReply.value, sharers, sharerCount);
-                            msgReply.extraData = node.memory[memBlockAddr];
+                            msgReply.value = node.memory[memBlockAddr];
                             
                             sendMessage(msg.sender, msgReply);
                         }
@@ -402,7 +403,7 @@ int main(int argc, char *argv[]) {
                         cacheLine->address = msg.address;
                         cacheLine->state = MODIFIED;
 
-                        memcpy(cacheLine->data, msg.data, msg.dataSize);
+                        memcpy(cacheline->value, msg.data, msg.dataSize);
 
                         waitingForReply = 0;
                         break;
@@ -414,12 +415,12 @@ int main(int argc, char *argv[]) {
                         msgReply.type = FLUSH_INVACK;
                         msgReply.sender = threadId;
                         msgReply.address = msg.address;
-                        msgReply.value = cacheLine->data;
+                        msgReply.value = cacheline->value;
                         
                         sendMessage(procNodeAddr, msgReply);
 
-                        if (msg.requester != procNodeAddr) {
-                            sendMessage(msg.requester, msgReply);
+                        if (msg.secondReceiver != procNodeAddr) {
+                            sendMessage(msg.secondReceiver, msgReply);
                         }
                         cacheLine->state = INVALID;
                         break;
@@ -429,13 +430,13 @@ int main(int argc, char *argv[]) {
                         if (threadId == procNodeAddr) {
                             directoryEntry *dir = &node.directory[memBlockAddr];
 
-                            memcpy(node.memory[memBlockAddr], msg.data, msg.dataSize);
+                            node.memory[memBlockAddr] = msg.value;
 
                             dir->state = DIR_EM;
-                            clearAllBits(dir->bitVector);
-                            setBit(dir->bitVector, msg.requester);
+                            clearAllBits(&dir->bitVector);
+                            setBit(dir->bitVector, msg.secondReceiver);
                         }
-                        else if (threadId == msg.requester) {
+                        else if (threadId == msg.secondReceiver) {
                             cacheLine *cacheLine = &node.cache[cacheIndex];
                             
                             if (cacheLine->state != INVALID && (cacheLine->address != msg.address)) {
@@ -445,7 +446,7 @@ int main(int argc, char *argv[]) {
                             cacheLine->address = msg.address;
                             cacheLine->state = MODIFIED;
 
-                            memcpy(cacheLine->data, msg.data, msg.dataSize);
+                            memcpy(cacheline->value, msg.data, msg.dataSize);
 
                             waitingForReply = 0;
                         }
@@ -488,10 +489,10 @@ int main(int argc, char *argv[]) {
                     case EVICT_MODIFIED: {
                         directoryEntry *dir = &node.directory[memBlockAddr];
 
-                        memcpy(node.memory[memBlockAddr], msg.data, msg.dataSize);
+                        node.memory[memBlockAddr] = msg.value;
 
                         dir->state = DIR_U;
-                        clearAllBits(dir->bitVector);
+                        clearAllBits(&dir->bitVector);
                         break;
                     }
                 }
@@ -547,7 +548,7 @@ int main(int argc, char *argv[]) {
 
                     if (cacheLine->state == MODIFIED || cacheLine->state == EXCLUSIVE) {
                         byte offset = 0; 
-                        cacheLine->data[offset] = instr.value;
+                        cacheline->value[offset] = instr.value;
 
                         cacheLine->state = MODIFIED;
                     } 
