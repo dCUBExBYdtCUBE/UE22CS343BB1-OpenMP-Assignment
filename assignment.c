@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <pthread.h>
 #include <string.h>
+#include <unistd.h> 
 
 #define NUM_PROCS 4
 #define CACHE_SIZE 4
@@ -97,7 +98,6 @@ pthread_mutex_t msgBufferLocks[NUM_PROCS];
 pthread_cond_t bufferNotEmptyConditions[NUM_PROCS];
 
 messageBuffer messageBuffers[ NUM_PROCS ];
-msgBufferLocks[ NUM_PROCS ];
 
 void setBit(byte *bitVector, int position) {
     *bitVector |= (1 << position);
@@ -194,7 +194,7 @@ int main(int argc, char *argv[]) {
                         
                         if (dir->state == DIR_U) {
                             dir->state = DIR_S;
-                            setBit(dir->bitVector, msg.sender);
+                            setBit(&dir->bitVector, msg.sender);
                             
                             msgReply.type = REPLY_RD;
                             msgReply.sender = threadId;
@@ -203,7 +203,7 @@ int main(int argc, char *argv[]) {
                             sendMessage(msg.sender, msgReply);
                         } 
                         else if (dir->state == DIR_S) {
-                            setBit(dir->bitVector, msg.sender);
+                            setBit(&dir->bitVector, msg.sender);
 
                             msgReply.type = REPLY_RD;
                             msgReply.sender = threadId;
@@ -235,7 +235,7 @@ int main(int argc, char *argv[]) {
                         cacheLine->address = msg.address;
                         cacheLine->state = SHARED;
 
-                        memcpy(cacheline->value, msg.data, msg.dataSize);
+                        cacheLine->value = msg.value;
 
                         waitingForReply = 0;
                         break;
@@ -268,8 +268,8 @@ int main(int argc, char *argv[]) {
                             if (dir->state == DIR_EM) {
                                 dir->state = DIR_S;
 
-                                setBit(dir->bitVector, msg.sender);
-                                setBit(dir->bitVector, msg.secondReceiver);
+                                setBit(&dir->bitVector, msg.sender);
+                                setBit(&dir->bitVector, msg.secondReceiver);
                             }
                         } 
                         else if (threadId == msg.secondReceiver) {
@@ -282,7 +282,7 @@ int main(int argc, char *argv[]) {
                             cacheLine->address = msg.address;
                             cacheLine->state = SHARED;
 
-                            memcpy(cacheline->value, msg.data, msg.dataSize);
+                            cacheLine->value = msg.value;
 
                             waitingForReply = 0;
                         }
@@ -292,7 +292,7 @@ int main(int argc, char *argv[]) {
                     case UPGRADE: {
                         directoryEntry *dir = &node.directory[memBlockAddr];
 
-                        byte sharers[MAX_PROCS];
+                        byte sharers[NUM_PROCS];
                         int sharerCount = 0;
 
                         for (int i = 0; i < NUM_PROCS; i++) {
@@ -303,7 +303,7 @@ int main(int argc, char *argv[]) {
 
                         dir->state = DIR_EM;
                         clearAllBits(&dir->bitVector);
-                        setBit(dir->bitVector, msg.sender);
+                        setBit(&dir->bitVector, msg.sender);
 
                         msgReply.type = REPLY_ID;
                         msgReply.sender = threadId;
@@ -319,7 +319,7 @@ int main(int argc, char *argv[]) {
                         cacheLine *cacheLine = &node.cache[cacheIndex];
 
                         for (int i = 0; i < msg.dataSize; i++) {
-                            byte sharer = msg.data[i];
+                            byte sharer = msg.value[i];
                             
                             msgReply.type = INV;
                             msgReply.sender = threadId;
@@ -349,7 +349,7 @@ int main(int argc, char *argv[]) {
                         if (dir->state == DIR_U) {
                             dir->state = DIR_EM;
                             clearAllBits(&dir->bitVector);
-                            setBit(dir->bitVector, msg.sender);
+                            setBit(&dir->bitVector, msg.sender);
                             
                             msgReply.type = REPLY_WR;
                             msgReply.sender = threadId;
@@ -358,7 +358,7 @@ int main(int argc, char *argv[]) {
                             sendMessage(msg.sender, msgReply);
                         }
                         else if (dir->state == DIR_S) {
-                            byte sharers[MAX_PROCS];
+                            byte sharers[NUM_PROCS];
                             int sharerCount = 0;
 
                             for (int i = 0; i < NUM_PROCS; i++) {
@@ -369,7 +369,7 @@ int main(int argc, char *argv[]) {
 
                             dir->state = DIR_EM;
                             clearAllBits(&dir->bitVector);
-                            setBit(dir->bitVector, msg.sender);
+                            setBit(&dir->bitVector, msg.sender);
 
                             msgReply.type = REPLY_ID;
                             msgReply.sender = threadId;
@@ -403,7 +403,7 @@ int main(int argc, char *argv[]) {
                         cacheLine->address = msg.address;
                         cacheLine->state = MODIFIED;
 
-                        memcpy(cacheline->value, msg.data, msg.dataSize);
+                        cacheLine->value = msg.value;
 
                         waitingForReply = 0;
                         break;
@@ -434,7 +434,7 @@ int main(int argc, char *argv[]) {
 
                             dir->state = DIR_EM;
                             clearAllBits(&dir->bitVector);
-                            setBit(dir->bitVector, msg.secondReceiver);
+                            setBit(&dir->bitVector, msg.secondReceiver);
                         }
                         else if (threadId == msg.secondReceiver) {
                             cacheLine *cacheLine = &node.cache[cacheIndex];
@@ -446,7 +446,7 @@ int main(int argc, char *argv[]) {
                             cacheLine->address = msg.address;
                             cacheLine->state = MODIFIED;
 
-                            memcpy(cacheline->value, msg.data, msg.dataSize);
+                            cacheLine->value = msg.value;
 
                             waitingForReply = 0;
                         }
@@ -457,7 +457,7 @@ int main(int argc, char *argv[]) {
                         if (threadId == procNodeAddr) {
                             directoryEntry *dir = &node.directory[memBlockAddr];
 
-                            clearBit(dir->bitVector, msg.sender);
+                            clearBit(&dir->bitVector, msg.sender);
                             
                             int remainingSharers = countSetBits(dir->bitVector);
                             
